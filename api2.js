@@ -232,124 +232,64 @@ exports.init = function(app, Config) {
     app.post('/api/usertweets/deleteflag', function(req, res) {
 
         console.log("delete Flag tweet id::::" + req.body._id);
-
-        var UserTweetFlag = mongoose.model('UserTweetFlag');
-
-        UserTweetFlag.update(
-		    {
-                'tweet_id': req.body._id,
-                'username': req.session.username
-            },
-
-			{
-                '$set': {
-                    'tweet_flag': 'N'
-                }
-            },
-		 function(err, numberAffected, raw) {
-                if (err) {
-                    console.log('Couldn\'t update userTweetFlag');
-                    return res.json({
-                        'error': 'Couldn\'t update userTweetFlag'
-                    }, 500);
-                }
-
+        var query_delete="UPDATE usertweets SET tweet_flag = "+'N'+"WHERE tweet_id="+req.body._id+"AND username = "+"'"+req.session.username+"'";
+        client.execute(query_delete,function(err,result){
+            if(err)
+            {
+                console.log("Error while deleting the user tweets");
                 return res.json({
-                    'successful': true
+                    'error':'Error in deleting error user tweets'
+                },500);
+            }
+            else
+            {
+                return res.json({
+                    'successful':true
                 });
-            });
+
+            }
+        });
 
     });
     app.get('/api/users/:username', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        User.findOne({
-            'username': req.params.username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.params.username;
+        var query="SELECT * from users where username = "+"'"+username+"'";
+        client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("Error while loading user data");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'Could not load user data'
+                },500);
             }
-            if (!user) {
-                console.log('No user with this username was not found1');
-                return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 404);
-            }
+                    res.json({
+                    'user':result
+                });
 
-            res.json({
-                'user': user
-            });
         });
+
     });
-
-    // app.get('/api/users/:username', auth.authenticate, function(req, res) {
-    //     var User = mongoose.model('User');
-    //     User.findOne({
-    //         'username': req.params.username
-    //     }, function(err, user) {
-    //         if (err) {
-    //             console.log('There was an error while loading data from the database: ', err);
-    //             return res.json({
-    //                 'error': 'Couldn\'t load user'
-    //             }, 500);
-    //         }
-    //         if (!user) {
-    //             console.log('No user with this username was not found1');
-    //             return res.json({
-    //                 'error': 'Couldn\'t load user'
-    //             }, 404);
-    //         }
-
-    //         res.json({
-    //             'user': user
-    //         });
-    //     });
-    // });
-
-
 
     // Tweet API
     app.get('/api/event/:eventname/tweets/:skip/:limit', auth.authenticate, function(req, res) {
-
-        var Tweet = mongoose.model('Tweet');
-        var Events = mongoose.model("Event");
-        console.log(Events+"---events");
-        //TODO add filter functions
-        /*	Tweet.find({'author.username': req.params.username}, null, {'sort': {'timestamp': -1}},{'skip':req.params.skip},{'limit':req.params.limit}, function(err, tweets) {
-        		if(err) {
-        			console.log('There was an error while loading data from the database: ', err);
-        			return res.json({'error': 'Couldn\'t load tweets for the user'}, 500);
-        		}
-        		res.json({'tweets': tweets});
-        	});*/
-        //.find({"author.username":"EmployeeJoining"}).sort({"_id":1}).limit(5);
-
-        Tweet.find({
-            "author.eventname": req.params.eventname
-        }).sort({
-            'timestamp':
-                -1
-        }).skip(req.params.skip).limit(req.params.limit).exec(function(err, tweets) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var author_event=req.params.eventname;
+        var limit=req.params.limit;
+        var query_tweets="SELECT * from tweets where author.eventname="+"'"+author_event+"'"+"LIMIT "+limit;
+        client.execute(query_tweets,function(err,result){
+            if(err)
+            {
+                console.log("Error while fetching tweets");
                 return res.json({
-                    'error': 'Couldn\'t load tweets for the user dashboard'
-                }, 500);
-            }
+                    'error':'Error while fetching tweets from database'
 
+                },500);
+            }
             res.json({
-                'tweets': tweets
+                'tweets':result
             });
         });
-
     });
-    // var promise = $http.get('/api/users/:username/:searchCriteriaData/:dashboard/:skip/:limit',auth.authenticate);
-    // promise.then(
-    //     function(payload) {
-    //       $scope.movieContent = payload.data;
-    //     });
+/*
     app.get('/api/users/:username/:searchCriteriaData/:displaytweet/:dashboard/:skip/:limit', auth.authenticate, function(req, res) {
 
         var idList = [];
@@ -370,105 +310,38 @@ exports.init = function(app, Config) {
                 conditionArray.push(obj);
             }
         }
-        //  console.log("conditionArray::"+conditionArray);
-        var User = mongoose.model('User');
-        var Tweet = mongoose.model('Tweet');
-
-        User.findOne({
-            'username': req.user.username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+           var username=req.user.username;
+           var query="SELECT * from users where username = "+"'"+username+"'";
+           client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while loading the data from the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'Could not fetch data from the users table'
+                });
             }
-
-            if (!user) {
-                console.log('No user with this username where found');
+            if(!user)
+            {
+                console.log("No such user is present in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'User not present'
+                });
             }
-
-
-            for (var i = 0; i < user.following.length; i++) {
+               for (var i = 0; i < user.following.length; i++) {
                 if (user.following[i].eventname) {
                     console.log(user.following[i].eventname);
                     idList.push(user.following[i].eventname);
                 }
             }
+
             var criteria = (searchCriteriaData == 'undefined' || searchCriteriaData == '') ? '' : {
                 $and: conditionArray
             };
-            //console.log("criteria::"+{$and:conditionArray});
 
-            /*Tweet.find(criteria).where('author.eventname').in(idList).sort({
-              'timestamp': -1
-            }).skip(req.params.skip).limit(req.params.limit).exec(function(err, tweets) {
-			  if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
-                    return res.json({
-                        'error': 'Couldn\'t load tweets for the user dashboard'
-                    }, 500);
-                }
-
-							for (var i = 0; i < tweets.length; i++) {
-					console.log(tweets[i].timestamp);
-				}
-
-				res.json({
-                    'tweets': tweets
-                });
-            });*/
+            var limit=req.params.limit;
+            var query="SELECT * from tweets where author.eventname IN"+islist+"LIMIT "+limit;
 
 
-
-				  console.log("display all records");
-               Tweet.aggregate([{
-                    '$match': {
-                        'author.eventname': {
-                            '$in': idList
-                        }
-                    }
-                },
-                {
-                    "$sort": {
-                        'timestamp': -1
-                    }
-                },
-
-                {
-                    "$skip": parseInt(req.params.skip)
-                },
-                {
-                    "$limit": parseInt(req.params.limit)
-                },
-
-                {
-                    "$lookup": {
-                        "from": 'usertweetflags',
-                        "localField": '_id',
-                        "foreignField": 'tweet_id',
-                        "as": 'tweetDetails'
-                    }
-                },
-							   {
-        '$addFields': {
-            'tweetDetails': {
-                '$arrayElemAt': [
-                    {
-                        '$filter': {
-                            input: '$tweetDetails',
-                            as: 'tweetDetail',
-                            'cond': {
-                               '$eq': [ '$$tweetDetail.username', req.session.username ]
-							 }
-                        }
-                    }, 0
-                ]
-            }
-        }
     }]).exec(function(err, tweets) {
 		          console.log("flag::"+ req.params.displaytweet +" tweet length"+tweets.length);
 			    	if(req.params.displaytweet=='flagtweet' && tweets.length>0  ){
@@ -497,124 +370,103 @@ exports.init = function(app, Config) {
                });
 		 });
     });
-
+*/
     app.post('/api/users/:username/tweets', auth.authenticate, function(req, res) {
+        var message=req.body.message;
+        var eventId=req.event.id;
+        var eventname=req.event.eventname;
+
         if (req.params.username !== req.user.username) {
             return res.json({
                 'error': 'You are not allowed to tweet as another user'
             }, 403);
         }
-
-        //TODO validation
-        var Tweet = mongoose.model('Tweet');
-        var tweet = new Tweet({
-            'author': {
-                'eventId': req.event.id,
-                'eventname': req.event.eventname
-            },
-            'message': req.body.message
-        });
-        tweet.save(function(err) {
-            if (err) {
-                console.log('There was an error while storing the tweet to the database: ' + err);
+        var query_insert="INSERT INTO tweets(message,author,timestamp)values("+"'"+message+"'"+","+"{eventId:"+eventId+","+"eventname:"+"'"+eventname+"'"+"})";
+        client.execute(query_insert,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while inserting the tweets in the database");
                 return res.json({
-                    'error': 'Couldn\'t store the tweet'
-                }, 500);
-            } else {
-                console.log('A new tweet was created with the id ' + tweet.id);
+                    'error':'Error while inserting'
+                },500);
+            }
+            else
+            {
+                console.log("Tweet successfully inserted into the database");
                 return res.json({
-                    'tweet': tweet
+                    'tweet':result
                 });
             }
-        });
+        })
     });
 
 
     app.post('/api/postComment/commentVal', function(req, res) {
+        var emp_id=req.body.emp_id;
+        var commentVal=req.body.commentVal;
+        var query_insert="INSERT INTO comments(emp_id,commentVal)values("+emp_id+","+"'"+commentVal+"'"+")";
+        client.execute(query_insert,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while inserting into comments");
+                return res.json({
+                    'error':'Error while inserting into comments'
 
-        //TODO validation
-        var Comment = mongoose.model('Comment');
-        var comment = new Comment({
-            'emp_id': req.body.emp_id,
-            'commentVal': req.body.commentVal
-        });
-        comment.save(function(err) {
-            if (err) {
-                console.log('There was an error while storing the comment to the database: ' + err);
-                return res.json({
-                    'error': 'Couldn\'t store the tweet'
-                }, 500);
-            } else {
-                console.log('A new comment was created with the id ' + comment.id);
-                return res.json({
-                    'comment': comment
-                });
+                },500);
             }
+            else
+            {
+                console.log("successfully inserted into comments");
+                return res.json({
+                    'comment':result
+                })
+            }
+
         });
     });
 
 
     //// EVENT API
     app.get('/api/events', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-
-        var username = req.query.username;
-
-        //if user is admin.so able to access restrcied status with restrict as well as normal.
-        User.findOne({
-            'username': username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.query.username;
+        var query_find="Select * from users where username ="+username;
+        client.execute(query_find,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while fetching the user from the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
+                    'error':'could not load the user'
 
-            if (!user) {
-                console.log('No user with this username was not found2');
+                },500);
+            }
+            if(!result)
+            {
+                console.log("No such user was found in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'No such user was found'
+                },500);
             }
-
             var followerMap = {};
             for (var i = 0; i < user.following.length; i++) {
                 followerMap[user.following[i].eventname] = 1;
             }
-
-            var userRole = username == "admin" ? {} : {
-                'restricted': 'N'
-            };
-            console.log("userRole::" + JSON.stringify(userRole));
-            //if user is admin,then able to access Normal as well as restricted  events.
-            //if user is not admin or normal user,then access only normal events.
-            Event.find(userRole, {
-                'eventname': 1,
-                'createdon': 1,
-                'follow': 1,
-                'parent_id':1,
-                'parent_name':1,
-                'event_message':1,
-                'event_fields':1,
-                'createdby': 1,
-                'topic_definition':1,
-                'topic_description':1
-            }, {
-                'sort': {
-                    'eventname': 1,
-                    'createdon': 1,
-                    'follow': 1
-                }
-            }, function(err, events) {
-                if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
+            var query;
+            if(username=="admin")
+            {
+                 query="SELECT * from events";
+            }
+            else if(username!="admin")
+            {
+                 query="SELECT * FROM events where restricted ="+'N';
+            }
+            client.execute(query,function(err2,events){
+                if(err2)
+                {
+                    console.log("There was a problem while loading the data from the database");
                     return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
+                        'error':'could not load the data'
+                    },500);
                 }
-
                 for (var i = 0; i < events.length; i++) {
                     if (events[i].eventname in followerMap) {
                         events[i]['follow'] = true;
@@ -629,132 +481,91 @@ exports.init = function(app, Config) {
                     'events': events
                 });
             });
+
         });
     });
 
     app.post('/api/events/:eventname', auth.authenticate, function(req, res) {
         console.log("-----------------" + event);
-
-        var Event = mongoose.model('Event');
-        Event.findOne({
-            'eventname': eventname
-        }, function(err, event) {
-
-            if (err) {
-                console.log('There was an error while fetching event from database: ' + err);
+        var query_find="SELECT * from events where eventname ="+"'"+eventname+"'";
+        client.execute(query_find,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while loading the data");
                 return res.json({
-                    'error': 'Couldn\'t load event'
-                }, 500);
-            } else {
-                console.log('event found ' + event.id);
+                    'error':'Could not load the required data'
+                },500);
+            }
+            else
+            {
+                console.log("Event found");
                 return res.json({
-                    'event': event
+                    'event':result
                 });
             }
         });
-    });
+
+        });
 
     app.get('/api/events/followings', auth.authenticate, function(req, res) {
-
-        var User = mongoose.model('User');
-        var username = req.query.username;
-
-        User.findOne({
-            'username': username
-        },
-        function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.query.username;
+        var query="SELECT * from users where username = "+"'"+username+"'";
+        client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while loading the data from the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'Could not load user data'
+                },500);
             }
-            if (!user) {
-                console.log('No user with this username was not found4');
+            if(!result)
+            {
+                console.log("No such user was found in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'No such user was found'
+                },500);
             }
-
-            return res.json({
-                'user': user
+            res.json({
+                'user':result
             });
         });
     });
 
     app.put('/api/events/:eventname/follow', auth.authenticate, function(req, res) {
+        var username=req.body.username;
+        var query_find="SELECT id,name,username FROM users where username="+"'"+username+"'";
+        client.execute(query_find,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while loading the data from the database");
+                return res.json({
+                    'error':'error while loading the data from the database'
 
-        var User = mongoose.model('User');
-
-        User.findOne({
-                'username': req.body.username
-            }, {
-                'id': 1,
-                'username': 1,
-                'name': 1
-            },
-            function(err, user) {
-                if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
-                    return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
-                }
-                if (!user) {
-                    console.log('No user with this username was not found3');
-                    return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
-                }
-
-                // User.find(
-                //     {
-                //         '_id': req.user.id
-                // }, {
-                //     following: {
-                //         $elemMatch: {
-                //             "eventname": req.body.following.parent_name
-                //         }
-                //     },
-                //     function(err, numberAffected, raw) {
-
-                //     if (err) {
-                //         console.log('Couldn\'t save user');
-                //         return res.json({
-                //             'error': 'Couldn\'t save user'
-                //         }, 500);
-                //     }
-                //     console.log('The user with id ' + req.user.id + ' follow now the event with id ' + following.parent_name);
-                //     return res.json({
-                //         'successful': true
-                //     });
-                //     }
-                // });
-
-                User.update({
-                    '_id': req.user.id
-                }, {
-                    '$push': {
-                        following: {
-                            'eventId': req.body.following._id,
-                            'eventname': req.body.following.parent_name
-                        }
-                    }
-                }, function(err, numberAffected, raw) {
-                    if (err) {
-                        console.log('Couldn\'t save user');
-                        return res.json({
-                            'error': 'Couldn\'t save user'
-                        }, 500);
-                    }
-
-                    //console.log('The user with id ' + req.user.id + ' follow now the event with id ');
-                    return res.json({
-                        'successful': true
-                    });
-                });
+                },500);
+            }
+            if(!result)
+            {
+                console.log("No such was found in the database");
+                return res.json({
+                    'error':'No such user was found in the database'
+                },500);
+            }
+            var query_update="Update users SET following.eventId = "+req.body.following._id+"AND eventname="+"'"+req.body.following.parent_name+"'";
+            if(err)
+            {
+                console.log("There was a problem while updating the user database");
+                return res.json({
+                    'error':'Error while updating'
+                },500);
+            }
+            res.json({
+                'successful':true
             });
-    });
+        
+      });
+
+});
+/*
     var get_total_num_docs = function(db_client, query, cb) {
         db_client.collection(query['collection'], function(e, coll) {
             coll.find(query.params, query.options).count(function(e, count) {
@@ -763,71 +574,58 @@ exports.init = function(app, Config) {
             });
         });
     };
+*/
+
     app.put('/api/events/:eventname/unfollow', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-
-        User.findOne({
-            'username': req.body.username
-        }, {}, {
-            'id': 1,
-            'username': 1,
-            'name': 1
-        }, function(err, following) {
-
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.body.username;
+        var query="SELECT id,username,name FROM users where username ="+"'"+username+"'";
+        client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while loading the data from the users database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'could not load user data'
+                },500);
             }
-            if (!following) {
-                console.log('No user with this username was not found4');
+            if(!result)
+            {
+                console.log("There was no such user found in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
-
-            User.update({
-                    '_id': req.user.id
-                }, {
-                    '$pull': {
-                        following: {
-                            'eventname': req.body.following.eventname,
-                            'follow':req.body.following.follow
-                        }
-                    }
-                },
-                function(err, numberAffected, raw) {
-                    if (err) {
-                        console.log('Couldn\'t save user');
-                        return res.json({
-                            'error': 'Couldn\'t save user'
-                        }, 500);
-                    }
-
-                    console.log('The user with id ' + req.user.id + ' unfollowed the event with id ' + following.id);
-                    return res.json({
-                        'successful': true
-                    });
+                    'error':'No such user was found in the database'
                 });
-
-            Event.update({
-              '_id': req.body.following._id
-            },{
-                '$push': {
-                    'follow': req.body.following.follow
-                }
-            }, function (err, result){
-                if (err) {
-                    console.log('Couldn\'t save user');
+            }
+            var query_update="DELETE FROM users where following.eventname="+"'"+req.body.result.eventname+"AND follow="+req.body.result.follow;
+            client.execute(query_update,function(err2,result2){
+                if(err)
+                {
+                    console.log("Error while deleting");
                     return res.json({
-                        'error': 'Couldn\'t save user'
-                    }, 500);
+                        'error':'Could not save users'
+
+                    },500);
+                }
+                else
+                {
+                    return res.json({
+                        'successful':true
+                    })
+                }
+
+            });
+            var query_update2="UPDATE users SET follow="+req.body.result.follow+"Where id ="+req.body.result.id;
+            client.execute(query_update2,function(err3,result3)
+            {
+                if(err3)
+                {
+                    console.log("There was a problem while updating users");
+                    return res.json({
+                        'error':'Could not update users'
+                    },500);
                 }
 
                 return res.json({
-                    'successful': true
+                    'successful':true
+
                 });
             });
 
@@ -835,92 +633,59 @@ exports.init = function(app, Config) {
     });
 
     app.post('/api/saverecentsearch', function(req, res) {
-        console.log(req.body);
-        var RecentSearch = mongoose.model('RecentSearch');
-        RecentSearch.findOne({
-            'emp_id': req.body.emp_id
-        }, function(err, recentSearch) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var emp_id=req.body.emp_id;
+        var query_find="SELECT * from RecentSearch where emp_id="+"'"+emp_id+"'";
+        client.execute(query_find,function(err,recentSearch)
+        {
+            if(err)
+            {
+                console.log("Could not load the recent searches from the database");
                 return res.json({
-                    'error': 'Couldn\'t load tweet flag data'
-                }, 500);
+                    'error':'Error occured while loading the data'
+                },500);
             }
-
-			console.log("test::"+JSON.stringify(recentSearch));
-            if (!recentSearch) {
-                //new entry
+            if(!recentSearch)
+            {
                 var currentDate = new Date();
-                var recentSearch = new RecentSearch({
-                    'emp_id': req.body.emp_id,
-                    'description': req.body.description,
-                    'date_time': req.body.date_time,
-                    'sequence': req.body.sequence
-
-                });
-
-                recentSearch.save(function(err) {
-                    if (err) {
-                        console.log('There was an error while storing the flag tweet to the database: ' + err);
+                var description: req.body.description;
+                var date_time: req.body.date_time;
+                var sequence: req.body.sequence;
+                var query_insert="INSERT INTO RecentSearch(emp_id,date_time,sequence)values("+"'"+emp_id+"'"+","+date_time+","+"'"+sequence+"'"+")";
+                client.execute(query_insert,function(err,result)
+                {
+                    if(err)
+                    {
+                        console.log("Error while loading data in Recent Searches");
                         return res.json({
-                            'error': 'Couldn\'t store the event'
-                        }, 500);
-                    } else {
-                        return res.json({
-                            'successful': true
-                        });
+                            'error':'Could not insert the data'
+                        },500);
                     }
-                });
-            } else {
-                 RecentSearch.find({
-                            'emp_id': req.body.emp_id
-                        }, function(err, recentSearch) {
-                            // $scope.descriptionArr = recentSearch[0].description;
-                            if(recentSearch[0].description.length < 3) {
-                            RecentSearch.update( { 'emp_id': req.body.emp_id },
-                            { "$push": { "description":  req.body.description } },
-                            function(err, numberAffected, raw) {
-                                if (err) {
-                                    console.log('Couldn\'t update userTweetFlag');
-                                    return res.json({
-                                        'error': 'Couldn\'t update userTweetFlag'
-                                    }, 500);
-                                }
-                        return res.json({
-                            'successful': true
-                        });
-                    });
-                    }
-                    else {
-                        RecentSearch.update( { 'emp_id': req.body.emp_id },
-                        { "$push": { "description":  req.body.description } },
-                        function(err, numberAffected, raw) {
-                            RecentSearch.update( { 'emp_id': req.body.emp_id },
-                                { $pop: { description: -1 } },
-                                function(err, numberAffected, raw) {
-                                    if (err) {
-                                        console.log('Couldn\'t update userTweetFlag');
-                                        return res.json({
-                                            'error': 'Couldn\'t update userTweetFlag'
-                                        }, 500);
-                                    }
-                                    return res.json({
-                                        'successful': true
-                                    });
-                                });
-                            if (err) {
-                                console.log('Couldn\'t update userTweetFlag');
+                    else
+                    {
+                        var query_update="Update RecentSearch SET description=description+"+"{"+"'"+description+"'"+"}";
+                        client.execute(query_update,function(err2,result2){
+                            if(err2)
+                            {
+                                console.log("Could not load the description");
                                 return res.json({
-                                    'error': 'Couldn\'t update userTweetFlag'
-                                }, 500);
+                                    'error':'Could not load the description into the database'
+                                });
                             }
-                    return res.json({
-                        'recentSearch': recentSearch
-                    });
-                });
+                        });
+                        return res.json({
+                            'successful':true
+                        })
                     }
+
                 });
+
             }
+            else
+            {
+                
+
+            }
+
         });
     });
 

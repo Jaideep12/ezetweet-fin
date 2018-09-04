@@ -20,7 +20,7 @@ client.execute(query7, function (err, result) {
   	console.log("Created Type for templates");
 });
 
-const query2 = "CREATE TABLE Users (username text primary key, password text, email text, name text, registered date,follow boolean,following frozen <follow>)";
+const query2 = "CREATE TABLE Users (id uuid primary key,username text, password text, email text, name text, registered date,follow boolean,following frozen <follow>)";
 client.execute(query2, function (err, result) {
   if(!err)
   	console.log("Created table for users");
@@ -28,7 +28,7 @@ client.execute(query2, function (err, result) {
   	console.log(err);
 });
 
-const query3 = "CREATE TABLE tweets (message text primary key, author frozen <follow>,timestamp text)";
+const query3 = "CREATE TABLE tweets (id uuid primary key,message text primary key, author frozen <follow>,timestamp text)";
 client.execute(query3, function (err, result) {
   if(!err)
   	console.log("Created table for tweets");
@@ -52,7 +52,7 @@ client.execute(query6, function (err, result) {
   	console.log(err);
 });
 
-const query8 = "CREATE TABLE Comments (commentVal text primary key)";
+const query8 = "CREATE TABLE Comments (emp_id int primary key,commentVal text)";
 client.execute(query8, function (err, result) {
   if(!err)
   	console.log("Created table for Comments");
@@ -64,6 +64,13 @@ const query9 = "CREATE TABLE userTweets (tweet_id int primary key,username text,
 client.execute(query9, function (err, result) {
   if(!err)
   	console.log("Created table for User tweets");
+  else
+  	console.log(err);
+});
+const query10 = "CREATE TABLE RecentSearch (id uuid primary key,emp_id text,description set<text>,date_time date,sequence text)";
+client.execute(query10, function (err, result) {
+  if(!err)
+  	console.log("Created table for Recent Searches");
   else
   	console.log(err);
 });
