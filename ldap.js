@@ -1,3 +1,4 @@
+console.log("ldap.JS");
 var LdapAuth = require('ldapauth-fork');
 
 module.exports = {

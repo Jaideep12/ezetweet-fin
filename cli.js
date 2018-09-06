@@ -1,10 +1,12 @@
 //----------------------------------------------------------------------
 // Include common libs
 //----------------------------------------------------------------------
+console.log("CLI.JS");
 var mongoose = require('mongoose');
 var program = require('commander');
 var async = require('async');
 var bcrypt = require('bcrypt-nodejs');
+var cassandra = require('cassandra-driver');
 
 
 //----------------------------------------------------------------------
@@ -17,12 +19,12 @@ var Package = require(__dirname + '/../../package.json');
 //----------------------------------------------------------------------
 // Setup the database connection
 //----------------------------------------------------------------------
-mongoose.connect(Config.mongoose.uri, Config.mongoose.options);
+const client = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'ezetweet' });
 
-require(__dirname + '/models');
+//require(__dirname + '/tables');
 
 
-var User = mongoose.model('User');
+//var User = mongoose.model('User');
 
 
 //----------------------------------------------------------------------
@@ -36,7 +38,7 @@ program
 	.description('register a new user')
 	.action(function() {
 		console.log('Register a new user');
-		
+		var username1,email1,name1,password1;
 		var user = {
 		};
 		async.series([
@@ -68,9 +70,11 @@ program
 				console.log('');
 				console.log('Are the following data correct:');
 				console.log(' Username: ' + user.username);
+				username1=user.username;
 				console.log(' Email:    ' + user.email);
+				email1=user.email;
 				console.log(' Name:     ' + user.name);
-				
+				name1=user.name;
 				program.confirm('continue? ', function(ok) {
 					console.log('');
 					if(ok) {
@@ -80,6 +84,8 @@ program
 							}
 							else {
 								user.password = hash;
+								password1=user.password;
+								/*
 								user = new User(user);
 								user.save(function(err) {
 									if(err) {
@@ -88,6 +94,18 @@ program
 									else {
 										console.log('A new user was created with the id '+user.id);
 									}
+								});*/
+								var query="INSERT INTO users(username,email,name,password)values("+"'"+username1+"'"+","+"'"+email1+"'"+","+"'"+name1+"'"+","+"'"+password1+"'"+")"
+								client.execute(query,function(err,result){
+									if(err)
+									{
+										console.log("There was a problem while storing the new user");
+									}
+									else
+									{
+										console.log("A new user added to the database");
+									}
+
 								});
 							}	
 						});

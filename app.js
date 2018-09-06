@@ -1,12 +1,14 @@
 //----------------------------------------------------------------------
 // Include common libs
 //----------------------------------------------------------------------
+
 var express = require('express');
 var expressError = require('express-error');
 var http = require('http');
 var https = require('https');
+var cassandra = require('cassandra-driver');
 
-var mongoose = require('mongoose');
+//var mongoose = require('mongoose');
 
 var path = require('path');
 
@@ -62,18 +64,18 @@ if('VMC_APP_PORT' in process.env) {
 	Config.printPort = false;
 }
 if('MONGOLAB_URI' in process.env) {
-	Config.mongoose.options = null;
-	Config.mongoose.uri = process.env.MONGOLAB_URI;
+	Config.cassandra.options = null;
+	Config.cassandra.uri = process.env.MONGOLAB_URI;
 }
 
 
 //----------------------------------------------------------------------
 // Setup the database connection
 //----------------------------------------------------------------------
-mongoose.connect(Config.mongoose.uri, Config.mongoose.options);
-mongoose.set('debug', true);
+const client = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'ezetweet' });
 
-require(__dirname + '/models');
+//require(__dirname + '/tables');
+
 
 //----------------------------------------------------------------------
 // Setup the basic webserver
@@ -143,10 +145,8 @@ app.get('/config.js', function(req, res) {
 	}
 	ret += '/api\';';
 	ret += 'var REGISTRATION_ENABLED='+Config.registration+';';
-	
 	res.send(ret);
 });
-
 //Initialize authentication
 require(__dirname + '/auth').init(app, Config);
 

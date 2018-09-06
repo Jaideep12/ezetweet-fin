@@ -1,14 +1,15 @@
+
+
 var auth = require(__dirname + '/auth');
 var mongoose = require('mongoose');
 var bcrypt = require('bcrypt-nodejs');
-//var popup = require('popups');
-//var url = require('url');
-//var stringify = require('json-stringify');
-// var idList = [];
+const cassandra = require('cassandra-driver');
+const client = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'ezetweet' });
+
 
 exports.init = function(app, Config) {
 
-    // Two test requests to make sure the api works
+    // Two test requests to make sure the api works 
     app.get('/api/ping', function(req, res) {
         res.json({
             'pong': true
@@ -25,751 +26,473 @@ exports.init = function(app, Config) {
 
     if (Config.registration) {
         app.post('/api/users', function(req, res) {
-            var User = mongoose.model('User');
-            //TODO validation
-            var user = new User(req.body);
-            User.count().or([{
-                'username': user.username
-            }, {
-                'email': user.email
-            }]).exec(function(err, count) {
-                if (err) {
-                    console.log('There was an error while counting existing users: ' + err);
+            var username=req.body.username;
+            var email=req.body.email;
+            var password=req.body.password;
+            var query_count="SELECT count(*) from users where username ="+"'"+username+"'"+"AND email = "+"'"+email+"'";
+            client.execute(query,function(err,result){
+                if(err)
+                {
+                    console.log("There was a problem while counting the number of users");
                     return res.json({
-                        'error': 'Couldn\'t hash the password'
-                    }, 500);
-                }
-                if (count >= 1) {
-                    return res.json({
-                        'error': 'A user with this username or email exists already'
-                    }, 500);
-                }
+                        'error':'could not hash the existing password'
 
-                bcrypt.hash(user.password, null, null, function(err, hash) {
+                    },500);
+                }
+                if(result>=1)
+                {
+                    console.log("A user with the given details already exists");
+                    return res.json({
+                        'error':'User already exists'
+                    },500);
+                }
+                bcrypt.hash(password, null, null, function(err, hash) {
                     if (err) {
                         console.log('There was an error while hashing the password: ' + err);
                         return res.json({
                             'error': 'Couldn\'t hash the password'
                         }, 500);
                     }
-                    user.password = hash;
-
-                    user.save(function(err) {
-                        if (err) {
-                            console.log('There was an error while storing the user to the database: ' + err);
+                     password = hash;
+                     var query_insert="INSERT INTO users (username,email,password) VALUES"+"("+"'"+username+"'"+","+"'"+email+"'"+","+"'"+password+"'"+")";
+                     client.execute(query_insert,function(err,result)
+                     {
+                        if(err)
+                        {
+                            console.log("Error while saving to the database");
                             return res.json({
-                                'error': 'Couldn\'t store the user'
-                            }, 500);
-                        } else {
-                            console.log('A new user was created with the id ' + user.id);
+                                'error':'could not store the user to the database'
+                            },500);
+                        }
+                        else
+                        {
+                            console.log("User details successfully stored in the database");
                             return res.json({
-                                'successful': true
+                                'successful':true
                             });
                         }
-                    });
+                     });
+
                 });
-            });
+
+          });
         });
     }
    
     app.post('/api/template',auth.authenticate, function(req, res) {
 
-        var Event = mongoose.model('Event');
-        var User = mongoose.model('User');
-        var event = new Event(req.body);
-
-        User.findOne({
-            'username': req.query.username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
-                return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
-            // user.following.push(req.body.eventname);
-            // idList.push(req.body.eventname);
-
+       var username=req.query.username;
+       var eventname=req.body.eventname;
+       var query_user="SELECT username from users where username = "+"'"+username+"'";
+       client.execute(query_user,function(err,result)
+       {
+          if(err)
+          {
+            console.log("There was an error while loading the data from the database");
             return res.json({
-                'user': user
-            });
-        });
+                'error':'could not load users'
 
+            },500);
+          }
+          console.log(result.rows[0].username);
+          return res.json({
+            'user':result.rows[0]
+          });
 
-        Event.count().or({
-            'eventname': req.body.eventname
-        }).exec(function(err, count) {
-            if (err) {
-                console.log('There was an error while counting existing event: ' + err);
+       });
+       var query_event="SELECT count(*) from events where eventname = "+"'"+eventname+"'";
+       client.execute(query_event,function(err,result)
+       {
+           if(err)
+           {
+             console.log("There was an error while counting the events");
+             return res.json({
+                'error':'could not count the event list'
+             },500);
+           }
+           if(result>=1)
+           {
+             console.log("Topic already exists in the database");
+             return res.json({
+                'error':'topic already exists'
+             },500);
+           }
+
+           var restricted= req.body.restricted;
+           var parent_id= req.body.parent_id;
+           var parent_name= req.body.parent_name;
+           var event_message= req.body.event_message;
+           var event_fields= req.body.event_fields;
+           var topic_definition= req.body.topic_definition;
+           var topic_description= req.body.topic_description;
+           var createdby=req.session.username;
+           var createdon= req.body.createdon;
+           var follow= req.body.follow;
+
+           var insert_events="INSERT INTO events(event_message,createdby,createdon,event_fields,eventname,follow,parent_id,parent_name,restricted)values("+"'"+event_message+"'"+","+"'"+createdby+"'"+","+createdon+","+"'"+event_fields+"'"+","+"'"+eventname+"'"+","+follow+","+parent_id+","+"'"+parent_name+"'"+","+"'"+restricted+"'"+")";
+           client.execute(insert_events,function(err,result){
+            if(err)
+            {
+                console.log("There was some problem while inserting the events");
                 return res.json({
-                    'error': 'Couldn\'t hash the password'
-                }, 500);
+                    'error':'Problem in inserting the events'
+                },500);
+
+            }
+            else
+            {
+                console.log("A new event was created with name = "+event_name);
+                return res.json({
+                    'successful':true
+                });
             }
 
-            if (count >= 1) {
-                return res.json({
-                    'error': 'Topic already exist! '
-                }, 500);
-            }
+           });
 
-
-            console.log("current Logged in user::" + req.session.username);
-            console.log("Parent Id::" + req.body.parent_id);
-
-            // var datetime = new Date();
-            console.log("created date::" + req.body.createdon);
-            var eventData = new Event({
-                'eventname': req.body.eventname,
-                'restricted': req.body.restricted,
-                'parent_id': req.body.parent_id,
-                'parent_name': req.body.parent_name,
-                'event_message': req.body.event_message,
-                'event_fields': req.body.event_fields,
-                'topic_definition': req.body.topic_definition,
-                'topic_description': req.body.topic_description,
-                //'':req.body.review_description,
-                //'':req.body.review_flag,
-                'createdby': req.session.username,
-                'createdon': req.body.createdon,
-                'follow': req.body.follow
-
-            });
-            eventData.save(function(err) {
-                if (err) {
-                    console.log('There was an error while storing the event to the database: ' + err);
-                    return res.json({
-                        'error': 'Couldn\'t store the event'
-                    }, 500);
-                } else {
-                    console.log('A new event was created with the id ' + event.id);
-                    return res.json({
-                        'successful': true
-                    });
-                }
-            });
-        });
+       });
+            
     });
-
     
-    app.post('/api/usertweets/saveflag', function(req, res) {
+        app.post('/api/usertweets/saveflag', function(req, res) {
 
         console.log("save Flag::" + req.body._id);
 
-        var UserTweetFlag = mongoose.model('UserTweetFlag');
-
         //-------------------
-        //checking already tweet flag entry is available.
-        UserTweetFlag.findOne({
-            'tweet_id': req.body._id,
-            'username': req.session.username,
-            'tweet_flag': 'N'
-        }, function(err, userTweetFlag) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
-                return res.json({
-                    'error': 'Couldn\'t load tweet flag data'
-                }, 500);
-            }
+        //checking already tweet flag entry is available
+            var tweet_id= req.body._id;
+            var username= req.session.username;
+            var tweet_flag='N';
 
-			console.log("test::"+JSON.stringify(userTweetFlag));
-            if (!userTweetFlag) {
-                //new entry
-                console.log("new entzry");
-                console.log('No tweet flag with tweet id found');
+            var query_user_tweets="SELECT * from usertweets where tweet_id = "+tweet_id+"AND username = "+"'"+username+"'"+"AND tweet_flag = "+tweet_flag;
+            client.execute(query_user_tweets,function(err,result){
+                if(err)
+                {
+                    console.log("There was a problem while loading the data from the database");
+                    return res.json({
+                        'error':'Could not load tweet data'
+
+                    },500);
+                }
+                if(!result)
+                {
 
                 var currentDate = new Date();
-                var userTweetFlag = new UserTweetFlag({
-                    'tweet_id': req.body._id,
-                    'username': req.session.username,
-                    'tweet_flag': 'Y',
-                    'createdby': req.session.username,
-                    'createdon': currentDate
-                });
+                tweet_flag= 'Y';
+                createdby= req.session.username;
+                createdon= currentDate;
 
-                userTweetFlag.save(function(err) {
-                    if (err) {
-                        console.log('There was an error while storing the flag tweet to the database: ' + err);
+                
+                var insert_user_tweets="INSERT INTO usertweets(tweet_id,createdby,createdon,tweet_flag,username)VALUES("+tweet_id+","+"'"+createdby+"'"+","+createdon+","+tweet_flag+","+"'"+username+"'"+")";
+                client.execute(insert_user_tweets,function(err,result){
+                    if(err)
+                    {
+                        console.log("There was an error while storing the tweets");
                         return res.json({
-                            'error': 'Couldn\'t store the event'
-                        }, 500);
-                    } else {
-                        return res.json({
-                            'successful': true
+                            'error':'Error while storing tweets'
                         });
                     }
-                });
-            } else {
-                //update old entry
-                console.log("update old entry");
-                UserTweetFlag.update(
-				   {
-                        'tweet_id': req.body._id,
-                        'username': req.session.username
-                    },
-
-				    {
-                        '$set': {
-                            'tweet_flag': 'Y'
-                        }
-                    },
-                    function(err, numberAffected, raw) {
-                        if (err) {
-                            console.log('Couldn\'t update userTweetFlag');
-                            return res.json({
-                                'error': 'Couldn\'t update userTweetFlag'
-                            }, 500);
-                        }
-
+                    else
+                    {
+                        console.log("The tweet has been inserted into the database");
                         return res.json({
-                            'successful': true
+                           'successful':true
                         });
-                    });
+                    }
+
+                });
+            }
+
+             else 
+             {
+                //update old entry
+                var query_update="Update usertweets SET tweet_flag = "+'Y'+"WHERE tweet_id = "+tweet_id+"AND username ="+"'"+username+"'";
+                client.execute(query_update,function(err,result){
+                    if(err)
+                    {
+                        console.log("There was an error while updating the tweets");
+                        return res.json({
+                            'error':'usertweets update failed'
+
+                        },500);
+                    }
+                    else
+                    {
+                        console.log("successfully updated user tweets");
+                        return res.json({
+                          'successful':true
+                        });
+                    }
+
+                });
             }
 
         });
-
-        //--------------------------
-        /* userTweetFlag.save(function(err) {
-            if (err) {
-                console.log('There was an error while storing the flag tweet to the database: ' + err);
-                return res.json({
-                    'error': 'Couldn\'t store the event'
-                }, 500);
-            } else {
-                console.log('A new flag tweet  \was created with the id ' + event.id);
-                return res.json({
-                    'successful': true
-                });
-            }
-        });*/
     });
 
     app.post('/api/usertweets/deleteflag', function(req, res) {
 
         console.log("delete Flag tweet id::::" + req.body._id);
-
-        var UserTweetFlag = mongoose.model('UserTweetFlag');
-
-        UserTweetFlag.update(
-		    {
-                'tweet_id': req.body._id,
-                'username': req.session.username
-            },
-
-			{
-                '$set': {
-                    'tweet_flag': 'N'
-                }
-            },
-		 function(err, numberAffected, raw) {
-                if (err) {
-                    console.log('Couldn\'t update userTweetFlag');
-                    return res.json({
-                        'error': 'Couldn\'t update userTweetFlag'
-                    }, 500);
-                }
-
+        var query_delete="UPDATE usertweets SET tweet_flag = "+'N'+"WHERE tweet_id="+req.body._id+"AND username = "+"'"+req.session.username+"'";
+        client.execute(query_delete,function(err,result){
+            if(err)
+            {
+                console.log("Error while deleting the user tweets");
                 return res.json({
-                    'successful': true
+                    'error':'Error in deleting error user tweets'
+                },500);
+            }
+            else
+            {
+                return res.json({
+                    'successful':true
                 });
-            });
+
+            }
+        });
 
     });
     app.get('/api/users/:username', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        User.findOne({
-            'username': req.params.username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.params.username;
+        var query="SELECT * from users where username = "+"'"+username+"'";
+        client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("Error while loading user data");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'Could not load user data'
+                },500);
             }
-            if (!user) {
-                console.log('No user with this username was not found1');
-                return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 404);
-            }
+                    res.json({
+                    'user':result
+                });
 
-            res.json({
-                'user': user
-            });
         });
+
     });
-
-    // app.get('/api/users/:username', auth.authenticate, function(req, res) {
-    //     var User = mongoose.model('User');
-    //     User.findOne({
-    //         'username': req.params.username
-    //     }, function(err, user) {
-    //         if (err) {
-    //             console.log('There was an error while loading data from the database: ', err);
-    //             return res.json({
-    //                 'error': 'Couldn\'t load user'
-    //             }, 500);
-    //         }
-    //         if (!user) {
-    //             console.log('No user with this username was not found1');
-    //             return res.json({
-    //                 'error': 'Couldn\'t load user'
-    //             }, 404);
-    //         }
-
-    //         res.json({
-    //             'user': user
-    //         });
-    //     });
-    // });
-
-
 
     // Tweet API
     app.get('/api/event/:eventname/tweets/:skip/:limit', auth.authenticate, function(req, res) {
-
-        var Tweet = mongoose.model('Tweet');
-        var Events = mongoose.model("Event");
-        console.log(Events+"---events");
-        //TODO add filter functions
-        /*	Tweet.find({'author.username': req.params.username}, null, {'sort': {'timestamp': -1}},{'skip':req.params.skip},{'limit':req.params.limit}, function(err, tweets) {
-        		if(err) {
-        			console.log('There was an error while loading data from the database: ', err);
-        			return res.json({'error': 'Couldn\'t load tweets for the user'}, 500);
-        		}
-        		res.json({'tweets': tweets});
-        	});*/
-        //.find({"author.username":"EmployeeJoining"}).sort({"_id":1}).limit(5);
-
-        Tweet.find({
-            "author.eventname": req.params.eventname
-        }).sort({
-            'timestamp':
-                -1
-        }).skip(req.params.skip).limit(req.params.limit).exec(function(err, tweets) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var author_event=req.params.eventname;
+        var limit=req.params.limit;
+        var query_tweets="SELECT * from tweets where author.eventname="+"'"+author_event+"'"+"LIMIT "+limit;
+        client.execute(query_tweets,function(err,result){
+            if(err)
+            {
+                console.log("Error while fetching tweets");
                 return res.json({
-                    'error': 'Couldn\'t load tweets for the user dashboard'
-                }, 500);
-            }
+                    'error':'Error while fetching tweets from database'
 
+                },500);
+            }
             res.json({
-                'tweets': tweets
+                'tweets':result
             });
         });
-
-    });
-    // var promise = $http.get('/api/users/:username/:searchCriteriaData/:dashboard/:skip/:limit',auth.authenticate);
-    // promise.then(
-    //     function(payload) {
-    //       $scope.movieContent = payload.data;
-    //     });
-    app.get('/api/users/:username/:searchCriteriaData/:displaytweet/:dashboard/:skip/:limit', auth.authenticate, function(req, res) {
-
-        var idList = [];
-        var searchCriteriaData = req.params.searchCriteriaData;
-
-		console.log("username::"+username);
-
-		console.log("displaytweet in API call::"+req.params.displaytweet);
-
-
-        var conditionArray = [];
-        if (searchCriteriaData == 'undefined') {} else {
-            searchCriteriaData = JSON.parse(searchCriteriaData);
-            for (var i = 0; i < searchCriteriaData.length; i++) {
-                console.log("colName::" + "author." + searchCriteriaData[i].key + ":" + searchCriteriaData[i].value);
-                var obj = {};
-                obj[searchCriteriaData[i].colname] = searchCriteriaData[i].colvalue;
-                conditionArray.push(obj);
-            }
-        }
-        //  console.log("conditionArray::"+conditionArray);
-        var User = mongoose.model('User');
-        var Tweet = mongoose.model('Tweet');
-
-        User.findOne({
-            'username': req.user.username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
-                return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
-
-            if (!user) {
-                console.log('No user with this username where found');
-                return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
-
-
-            for (var i = 0; i < user.following.length; i++) {
-                if (user.following[i].eventname) {
-                    console.log(user.following[i].eventname);
-                    idList.push(user.following[i].eventname);
-                }
-            }
-            var criteria = (searchCriteriaData == 'undefined' || searchCriteriaData == '') ? '' : {
-                $and: conditionArray
-            };
-            //console.log("criteria::"+{$and:conditionArray});
-
-            /*Tweet.find(criteria).where('author.eventname').in(idList).sort({
-              'timestamp': -1
-            }).skip(req.params.skip).limit(req.params.limit).exec(function(err, tweets) {
-			  if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
-                    return res.json({
-                        'error': 'Couldn\'t load tweets for the user dashboard'
-                    }, 500);
-                }
-
-							for (var i = 0; i < tweets.length; i++) {
-					console.log(tweets[i].timestamp);
-				}
-
-				res.json({
-                    'tweets': tweets
-                });
-            });*/
-
-
-
-				  console.log("display all records");
-               Tweet.aggregate([{
-                    '$match': {
-                        'author.eventname': {
-                            '$in': idList
-                        }
-                    }
-                },
-                {
-                    "$sort": {
-                        'timestamp': -1
-                    }
-                },
-
-                {
-                    "$skip": parseInt(req.params.skip)
-                },
-                {
-                    "$limit": parseInt(req.params.limit)
-                },
-
-                {
-                    "$lookup": {
-                        "from": 'usertweetflags',
-                        "localField": '_id',
-                        "foreignField": 'tweet_id',
-                        "as": 'tweetDetails'
-                    }
-                },
-							   {
-        '$addFields': {
-            'tweetDetails': {
-                '$arrayElemAt': [
-                    {
-                        '$filter': {
-                            input: '$tweetDetails',
-                            as: 'tweetDetail',
-                            'cond': {
-                               '$eq': [ '$$tweetDetail.username', req.session.username ]
-							 }
-                        }
-                    }, 0
-                ]
-            }
-        }
-    }]).exec(function(err, tweets) {
-		          console.log("flag::"+ req.params.displaytweet +" tweet length"+tweets.length);
-			    	if(req.params.displaytweet=='flagtweet' && tweets.length>0  ){
-					     for(var i = tweets.length -1; i >= 0 ; i--){
-							// console.log("test::"+tweets[i].tweetDetails.tweet_flag);
-                          if(tweets[i].tweetDetails===undefined){
-							  tweets.splice(i, 1);
-						  }
-							 else if(typeof tweets[i].tweetDetails !== "undefined" && tweets[i].tweetDetails.tweet_flag=='N'){
-							    tweets.splice(i, 1);
-						   }else{
-
-						   }
-				    }
-					}
-			    if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
-                    return res.json({
-                        'error': 'Couldn\'t load tweets for the user dashboard'
-                    }, 500);
-                }
-                res.json(   {
-                             'tweets': tweets
-                           }
-				);
-               });
-		 });
     });
 
+     app.get('/api/users/:username/:searchCriteriaData/:displaytweet/:dashboard/:skip/:limit', auth.authenticate, function(req, res) {
+
+    });
+
+
+    
     app.post('/api/users/:username/tweets', auth.authenticate, function(req, res) {
+        var message=req.body.message;
+        var eventId=req.event.id;
+        var eventname=req.event.eventname;
+
         if (req.params.username !== req.user.username) {
             return res.json({
                 'error': 'You are not allowed to tweet as another user'
             }, 403);
         }
-
-        //TODO validation
-        var Tweet = mongoose.model('Tweet');
-        var tweet = new Tweet({
-            'author': {
-                'eventId': req.event.id,
-                'eventname': req.event.eventname
-            },
-            'message': req.body.message
-        });
-        tweet.save(function(err) {
-            if (err) {
-                console.log('There was an error while storing the tweet to the database: ' + err);
+        var query_insert="INSERT INTO tweets(message,author,timestamp)values("+"'"+message+"'"+","+"{eventId:"+eventId+","+"eventname:"+"'"+eventname+"'"+"})";
+        client.execute(query_insert,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while inserting the tweets in the database");
                 return res.json({
-                    'error': 'Couldn\'t store the tweet'
-                }, 500);
-            } else {
-                console.log('A new tweet was created with the id ' + tweet.id);
+                    'error':'Error while inserting'
+                },500);
+            }
+            else
+            {
+                console.log("Tweet successfully inserted into the database");
                 return res.json({
-                    'tweet': tweet
+                    'tweet':result
                 });
             }
-        });
+        })
     });
 
 
     app.post('/api/postComment/commentVal', function(req, res) {
+        var emp_id=req.body.emp_id;
+        var commentVal=req.body.commentVal;
+        var query_insert="INSERT INTO comments(emp_id,commentVal)values("+emp_id+","+"'"+commentVal+"'"+")";
+        client.execute(query_insert,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while inserting into comments");
+                return res.json({
+                    'error':'Error while inserting into comments'
 
-        //TODO validation
-        var Comment = mongoose.model('Comment');
-        var comment = new Comment({
-            'emp_id': req.body.emp_id,
-            'commentVal': req.body.commentVal
-        });
-        comment.save(function(err) {
-            if (err) {
-                console.log('There was an error while storing the comment to the database: ' + err);
-                return res.json({
-                    'error': 'Couldn\'t store the tweet'
-                }, 500);
-            } else {
-                console.log('A new comment was created with the id ' + comment.id);
-                return res.json({
-                    'comment': comment
-                });
+                },500);
             }
+            else
+            {
+                console.log("successfully inserted into comments");
+                return res.json({
+                    'comment':result
+                })
+            }
+
         });
     });
 
 
     //// EVENT API
     app.get('/api/events', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-
-        var username = req.query.username;
-
-        //if user is admin.so able to access restrcied status with restrict as well as normal.
-        User.findOne({
-            'username': username
-        }, function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+    	console.log("Going to events");
+        var username=req.query.username;
+        var query_find="Select * from users where username ="+"'"+username+"'";
+        client.execute(query_find,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while fetching the user from the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
+                    'error':'could not load the user'
 
-            if (!user) {
-                console.log('No user with this username was not found2');
+                },500);
+            }
+            if(!result)
+            {
+                console.log("No such user was found in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'No such user was found'
+                },500);
             }
-
             var followerMap = {};
-            for (var i = 0; i < user.following.length; i++) {
-                followerMap[user.following[i].eventname] = 1;
+            for (var i = 0; i < result.rows[0].following.length; i++) {
+                followerMap[result.rows[0].following[i].eventname] = 1;
             }
-
-            var userRole = username == "admin" ? {} : {
-                'restricted': 'N'
-            };
-            console.log("userRole::" + JSON.stringify(userRole));
-            //if user is admin,then able to access Normal as well as restricted  events.
-            //if user is not admin or normal user,then access only normal events.
-            Event.find(userRole, {
-                'eventname': 1,
-                'createdon': 1,
-                'follow': 1,
-                'parent_id':1,
-                'parent_name':1,
-                'event_message':1,
-                'event_fields':1,
-                'createdby': 1,
-                'topic_definition':1,
-                'topic_description':1
-            }, {
-                'sort': {
-                    'eventname': 1,
-                    'createdon': 1,
-                    'follow': 1
-                }
-            }, function(err, events) {
-                if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
+            var query;
+            if(username=="admin")
+            {
+                 query="SELECT * from events";
+            }
+            else if(username!="admin")
+            {
+                 query="SELECT * FROM events where restricted ="+'N';
+            }
+            client.execute(query,function(err2,events){
+                if(err2)
+                {
+                    console.log("There was a problem while loading the data from the database");
                     return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
+                        'error':'could not load the data'
+                    },500);
                 }
-
-                for (var i = 0; i < events.length; i++) {
-                    if (events[i].eventname in followerMap) {
-                        events[i]['follow'] = true;
+                for (var i = 0; i < events.rows.length; i++) {
+                    if (events.rows[i].eventname in followerMap) {
+                        events.rows[i]['follow'] = true;
                     } else {
-                        events[i]['follow'] = false;
+                        events.rows[i]['follow'] = false;
                     }
-                    events[i] = events[i].toObject({
+                    events.rows[i] = events.rows[i].toObject({
                         virtuals: false
                     });
                 }
                 res.json({
-                    'events': events
+                    'events': events.rows
                 });
             });
+
         });
     });
 
     app.post('/api/events/:eventname', auth.authenticate, function(req, res) {
         console.log("-----------------" + event);
-
-        var Event = mongoose.model('Event');
-        Event.findOne({
-            'eventname': eventname
-        }, function(err, event) {
-
-            if (err) {
-                console.log('There was an error while fetching event from database: ' + err);
+        var query_find="SELECT * from events where eventname ="+"'"+eventname+"'";
+        client.execute(query_find,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while loading the data");
                 return res.json({
-                    'error': 'Couldn\'t load event'
-                }, 500);
-            } else {
-                console.log('event found ' + event.id);
+                    'error':'Could not load the required data'
+                },500);
+            }
+            else
+            {
+                console.log("Event found");
                 return res.json({
-                    'event': event
+                    'event':result.rows[0]
                 });
             }
         });
-    });
+
+        });
 
     app.get('/api/events/followings', auth.authenticate, function(req, res) {
-
-        var User = mongoose.model('User');
-        var username = req.query.username;
-
-        User.findOne({
-            'username': username
-        },
-        function(err, user) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.query.username;
+        var query="SELECT * from users where username = "+"'"+username+"'";
+        client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while loading the data from the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'Could not load user data'
+                },500);
             }
-            if (!user) {
-                console.log('No user with this username was not found4');
+            if(!result)
+            {
+                console.log("No such user was found in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'No such user was found'
+                },500);
             }
-
-            return res.json({
-                'user': user
+            res.json({
+                'user':result.rows[0]
             });
         });
     });
 
     app.put('/api/events/:eventname/follow', auth.authenticate, function(req, res) {
+        var username=req.body.username;
+        var query_find="SELECT id,name,username FROM users where username="+"'"+username+"'";
+        client.execute(query_find,function(err,result){
+            if(err)
+            {
+                console.log("There was a problem while loading the data from the database");
+                return res.json({
+                    'error':'error while loading the data from the database'
 
-        var User = mongoose.model('User');
-
-        User.findOne({
-                'username': req.body.username
-            }, {
-                'id': 1,
-                'username': 1,
-                'name': 1
-            },
-            function(err, user) {
-                if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
-                    return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
-                }
-                if (!user) {
-                    console.log('No user with this username was not found3');
-                    return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
-                }
-
-                // User.find(
-                //     {
-                //         '_id': req.user.id
-                // }, {
-                //     following: {
-                //         $elemMatch: {
-                //             "eventname": req.body.following.parent_name
-                //         }
-                //     },
-                //     function(err, numberAffected, raw) {
-
-                //     if (err) {
-                //         console.log('Couldn\'t save user');
-                //         return res.json({
-                //             'error': 'Couldn\'t save user'
-                //         }, 500);
-                //     }
-                //     console.log('The user with id ' + req.user.id + ' follow now the event with id ' + following.parent_name);
-                //     return res.json({
-                //         'successful': true
-                //     });
-                //     }
-                // });
-
-                User.update({
-                    '_id': req.user.id
-                }, {
-                    '$push': {
-                        following: {
-                            'eventId': req.body.following._id,
-                            'eventname': req.body.following.parent_name
-                        }
-                    }
-                }, function(err, numberAffected, raw) {
-                    if (err) {
-                        console.log('Couldn\'t save user');
-                        return res.json({
-                            'error': 'Couldn\'t save user'
-                        }, 500);
-                    }
-
-                    //console.log('The user with id ' + req.user.id + ' follow now the event with id ');
-                    return res.json({
-                        'successful': true
-                    });
-                });
+                },500);
+            }
+            if(!result)
+            {
+                console.log("No such was found in the database");
+                return res.json({
+                    'error':'No such user was found in the database'
+                },500);
+            }
+            var query_update="Update users SET following.eventId = "+req.body.following._id+"AND eventname="+"'"+req.body.following.parent_name+"'";
+            if(err)
+            {
+                console.log("There was a problem while updating the user database");
+                return res.json({
+                    'error':'Error while updating'
+                },500);
+            }
+            res.json({
+                'successful':true
             });
-    });
+        
+      });
+
+});
+
+/*
     var get_total_num_docs = function(db_client, query, cb) {
         db_client.collection(query['collection'], function(e, coll) {
             coll.find(query.params, query.options).count(function(e, count) {
@@ -778,71 +501,58 @@ exports.init = function(app, Config) {
             });
         });
     };
+    */
+
     app.put('/api/events/:eventname/unfollow', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-
-        User.findOne({
-            'username': req.body.username
-        }, {}, {
-            'id': 1,
-            'username': 1,
-            'name': 1
-        }, function(err, following) {
-
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+        var username=req.body.username;
+        var query="SELECT id,username,name FROM users where username ="+"'"+username+"'";
+        client.execute(query,function(err,result){
+            if(err)
+            {
+                console.log("There was an error while loading the data from the users database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
+                    'error':'could not load user data'
+                },500);
             }
-            if (!following) {
-                console.log('No user with this username was not found4');
+            if(!result)
+            {
+                console.log("There was no such user found in the database");
                 return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
-
-            User.update({
-                    '_id': req.user.id
-                }, {
-                    '$pull': {
-                        following: {
-                            'eventname': req.body.following.eventname,
-                            'follow':req.body.following.follow
-                        }
-                    }
-                },
-                function(err, numberAffected, raw) {
-                    if (err) {
-                        console.log('Couldn\'t save user');
-                        return res.json({
-                            'error': 'Couldn\'t save user'
-                        }, 500);
-                    }
-
-                    console.log('The user with id ' + req.user.id + ' unfollowed the event with id ' + following.id);
-                    return res.json({
-                        'successful': true
-                    });
+                    'error':'No such user was found in the database'
                 });
-
-            Event.update({
-              '_id': req.body.following._id
-            },{
-                '$push': {
-                    'follow': req.body.following.follow
-                }
-            }, function (err, result){
-                if (err) {
-                    console.log('Couldn\'t save user');
+            }
+            var query_update="DELETE FROM users where following.eventname="+"'"+req.body.result.eventname+"AND follow="+req.body.result.follow;
+            client.execute(query_update,function(err2,result2){
+                if(err)
+                {
+                    console.log("Error while deleting");
                     return res.json({
-                        'error': 'Couldn\'t save user'
-                    }, 500);
+                        'error':'Could not save users'
+
+                    },500);
+                }
+                else
+                {
+                    return res.json({
+                        'successful':true
+                    })
+                }
+
+            });
+            var query_update2="UPDATE users SET follow="+req.body.result.follow+"Where id ="+req.body.result.id;
+            client.execute(query_update2,function(err3,result3)
+            {
+                if(err3)
+                {
+                    console.log("There was a problem while updating users");
+                    return res.json({
+                        'error':'Could not update users'
+                    },500);
                 }
 
                 return res.json({
-                    'successful': true
+                    'successful':true
+
                 });
             });
 
@@ -850,353 +560,224 @@ exports.init = function(app, Config) {
     });
 
     app.post('/api/saverecentsearch', function(req, res) {
-        console.log(req.body);
-        var RecentSearch = mongoose.model('RecentSearch');
-        RecentSearch.findOne({
-            'emp_id': req.body.emp_id
-        }, function(err, recentSearch) {
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
+    	 console.log(req.body);
+        var emp_id=req.body.emp_id;
+        console.log(emp_id);
+        var query_find="SELECT * from recentsearch where emp_id="+"'"+emp_id+"'"+"allow filtering";
+        client.execute(query_find,function(err,recentSearch)
+        {
+            if(err)
+            {
+                console.log("Could not load the recent searches from the database");
                 return res.json({
-                    'error': 'Couldn\'t load tweet flag data'
-                }, 500);
+                    'error':'Error occured while loading the data'
+                },500);
             }
-
-			console.log("test::"+JSON.stringify(recentSearch));
-            if (!recentSearch) {
-                //new entry
+            if(!recentSearch)
+            {
                 var currentDate = new Date();
-                var recentSearch = new RecentSearch({
-                    'emp_id': req.body.emp_id,
-                    'description': req.body.description,
-                    'date_time': req.body.date_time,
-                    'sequence': req.body.sequence
-
-                });
-
-                recentSearch.save(function(err) {
-                    if (err) {
-                        console.log('There was an error while storing the flag tweet to the database: ' + err);
+                var description= req.body.description;
+                var date_time= req.body.date_time;
+                var sequence= req.body.sequence;
+                var query_insert="INSERT INTO recentsearch(emp_id,date_time,sequence)values("+"'"+emp_id+"'"+","+date_time+","+"'"+sequence+"'"+")";
+                client.execute(query_insert,function(err,result)
+                {
+                    if(err)
+                    {
+                        console.log("Error while loading data in Recent Searches");
                         return res.json({
-                            'error': 'Couldn\'t store the event'
-                        }, 500);
-                    } else {
-                        return res.json({
-                            'successful': true
-                        });
+                            'error':'Could not insert the data'
+                        },500);
                     }
-                });
-            } else {
-                 RecentSearch.find({
-                            'emp_id': req.body.emp_id
-                        }, function(err, recentSearch) {
-                            // $scope.descriptionArr = recentSearch[0].description;
-                            if(recentSearch[0].description.length < 3) {
-                            RecentSearch.update( { 'emp_id': req.body.emp_id },
-                            { "$push": { "description":  req.body.description } },
-                            function(err, numberAffected, raw) {
-                                if (err) {
-                                    console.log('Couldn\'t update userTweetFlag');
-                                    return res.json({
-                                        'error': 'Couldn\'t update userTweetFlag'
-                                    }, 500);
-                                }
-                        return res.json({
-                            'successful': true
-                        });
-                    });
-                    }
-                    else {
-                        RecentSearch.update( { 'emp_id': req.body.emp_id },
-                        { "$push": { "description":  req.body.description } },
-                        function(err, numberAffected, raw) {
-                            RecentSearch.update( { 'emp_id': req.body.emp_id },
-                                { $pop: { description: -1 } },
-                                function(err, numberAffected, raw) {
-                                    if (err) {
-                                        console.log('Couldn\'t update userTweetFlag');
-                                        return res.json({
-                                            'error': 'Couldn\'t update userTweetFlag'
-                                        }, 500);
-                                    }
-                                    return res.json({
-                                        'successful': true
-                                    });
-                                });
-                            if (err) {
-                                console.log('Couldn\'t update userTweetFlag');
+                    else
+                    {
+                        var query_update="Update RecentSearch SET description=description+"+"{"+"'"+description+"'"+"}";
+                        client.execute(query_update,function(err2,result2){
+                            if(err2)
+                            {
+                                console.log("Could not load the description");
                                 return res.json({
-                                    'error': 'Couldn\'t update userTweetFlag'
-                                }, 500);
+                                    'error':'Could not load the description into the database'
+                                });
                             }
-                    return res.json({
-                        'recentSearch': recentSearch
-                    });
-                });
-                    }
-                });
-            }
-        });
-    });
-
-    app.get('/api/recentSearches', auth.authenticate, function(req, res) {
-        var RecentSearch = mongoose.model('RecentSearch');
-        RecentSearch.find({},
-        function(err, recentSearcheData) {
-            if (err) {
-                console.log('There was an error while storing the flag tweet to the Database: ' + err);
-                return res.json({
-                    'error': 'Couldn\'t store the event'
-                }, 500);
-            }
-
-            for(var i = 0 ;i < recentSearcheData.length; i++){
-                if(recentSearcheData[i].emp_id === req.query.username){
-                    recentSearcheData = recentSearcheData[i];
-                }
-            }
-
-            return res.json({
-                'res': recentSearcheData
-            });
-        });
-    });
-
-    /*get search List api */
-    app.get('/api/searchList', auth.authenticate, function(req, res) {
-
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-        var username = req.query.username;
-
-        //if user is admin.so able to access restrcied status with restrict as well as normal.
-        User.findOne({
-            'username': username
-        }, function(err, user) {
-            Event.aggregate([
-                { $sort: { "createdon": -1} },
-                { $group : {
-                    "_id": "$parent_id",
-                    "parent_name": {"$first": "$parent_name"},
-                    search_list : { $push: "$$ROOT"}
-                    }
-                },
-                { $project: {
-                    parent_id : "$_id",
-                    parent_name: 1,
-                    search_list:1,
-                    lastUpdated: {
-                      $let: {
-                        vars: {
-                          firstUser: {
-                            $arrayElemAt: ["$search_list", 0]
-                          }
-                        },
-                        in: {
-                          createdon: "$$firstUser.createdon"
-                        }
-                      }
-                    }/*,
-                     follow: {
-                      $let: {
-                        vars: {
-                          firstUser: {
-                            $arrayElemAt: ["$search_list", 0]
-                          }
-                        },
-                        in: {
-                          follow: "$$firstUser.follow"
-                        }
-                      }
-                    }*/
-                }}
-            ], function(err, list){
-                if (err) {
-                    console.log('There was an error while storing the flag tweet to the database: ' + err);
-                    return res.json({
-                        'error': 'Couldn\'t store the event'
-                    }, 500);
-                }
-
-                res.json({
-                    'searchList': list
-                });
-            });
-        })
-    });
-
-    /* Source system api Start */
-    app.get('/api/source', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        var Tweet = mongoose.model('Tweet');
-
-        User.findOne({
-            'username': username
-        }, function(err, user) {
-            Tweet.aggregate([
-                {$group: {
-                    '_id':"$author.sourceSystem",
-                    count:{$sum:1}
-                    }
-                },
-                { $project: {
-                    'sourceSystem':"$_id",
-                    count:1
-                    }
-                }
-            ],function(err, source){
-                if (err) {
-                    console.log('There was an error while storing the flag tweet to the database: ' + err);
-                    return res.json({
-                        'error': 'Couldn\'t store the event'
-                    }, 500);
-                }
-
-                res.json({
-                    'source': source
-                });
-            });
-        });
-    })
-    /* Source system api End */
-
-    /* Get Subscribed List Api Start */
-    app.get('/api/subscribedList', auth.authenticate, function(req, res) {
-
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-        var username = req.query.username;
-
-        User.findOne({
-            'username': username
-        }, function(err, user) {
-            Event.aggregate([
-                { $sort: { "createdon": -1} },
-                { $group : {
-                    "_id": "$parent_id",
-                    "parent_name": {"$first": "$parent_name"},
-                    "follow": {"$first": "$follow"},
-                    subscribed_list : { $push: "$$ROOT"}
-                    }
-                },
-                { $project: {
-                    parent_id : "$_id",
-                    parent_name: 1,
-                    follow:"$follow",
-                    subscribed_list:1,
-                    lastUpdated: {
-                      $let: {
-                        vars: {
-                          firstUser: {
-                            $arrayElemAt: ["$subscribed_list", 0]
-                          }
-                        },
-                        in: {
-                          createdon: "$$firstUser.createdon"
-                        }
-                      }
-                    }
-                }}
-            ], function(err, subscribedList){
-                if (err) {
-                    console.log('There was an error while storing the flag tweet to the database: ' + err);
-                    return res.json({
-                        'error': 'Couldn\'t store the event'
-                    }, 500);
-                }
-
-                res.json({
-                    'subscribedList': subscribedList
-                });
-            });
-        })
-    });
-
-    /*Get Subscribed List Api End */
-    /* topic follow start*/
-    app.put('/api/events/:eventname/topicFollow', auth.authenticate, function(req, res) {
-
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
-
-        User.findOne({
-                'username': req.body.username
-            }, {
-                'id': 1,
-                'username': 1,
-                'name': 1
-            },
-            function(err, following) {
-                if (err) {
-                    console.log('There was an error while loading data from the database: ', err);
-                    return res.json({
-                        'error': 'Couldn\'t load user'
-                    }, 500);
-                }
-
-                Event.update(
-                    {
-                        '_id': req.body.following._id
-                    },
-                    {
-                        $set: {
-                            'follow': req.body.following.follow
-                        }
-                    }, function(err, event) {
-                        if (err) {
-                            console.log('Couldn\'t save user');
-                            return res.json({
-                                'error': 'Couldn\'t save user'
-                            }, 500);
-                        }
+                        });
                         return res.json({
-                            'successful': true
-                    });
-                })
+                            'successful':true
+                        })
+                    }
+
+                });
+
+            }
+            else
+            {
+                var query_find2="Select * from recentsearch where emp_id="+"'"+emp_id+"'"+"allow filtering";
+                client.execute(query_find2,function(err,recentSearch){
+                	if(err)
+                	{
+                		console.log("Recent search returned undefined");
+                		throw err;
+                	}
+                    if(recentSearch.rows[0].description.length<3)
+                    {
+                        var query_update="Update RecentSearch SET description=description+"+"{'"+req.body.description+"'}where id="+recentSearch.rows[0].id;
+                        client.execute(query_update,function(err,result){
+                            if(err)
+                            {
+                                console.log("Error while updating Recent Searches");
+                                return res.json({
+                                    'error':'Error updating recent searches'
+                                },500);
+                            }
+                            return res.json({
+                                'successful':true
+                            });
+
+                        });
+                    }
+                    else
+                    {
+                        var query_update="Update recentsearch SET description=description+"+"{'"+req.body.description+"'}where id="+recentSearch.rows[0].id;
+                        client.execute(query_update,function(err,result){
+                            var query="Update recentsearch SET description=description-{"+"'"+recentSearch.rows[0].description[0]+"'"+"}"+"Where id="+recentSearch.rows[0].id;
+                            client.execute(query,function(err,result){
+                                if(err)
+                                {
+                                    console.log("Could not update description field");
+                                    return res.json({
+                                        'error':'Could not update description'
+
+                                    },500);
+                                }
+                                return res.json({
+                                    'successful':true
+
+                                });
+
+                            });
+                            if(err)
+                            {
+                                console.log("Could not update user tweet flag");
+                                return res.json({
+                                    'error':'Could not update user tweet flag'
+
+                                },500);
+                            }
+                            return res.json({
+                                'recentSearch':recentSearch.rows[0]
+                            })
+
+                        });
+                    }
+
+                });
+
+            }
+
+        });
+    });
+
+        app.get('/api/recentSearches', auth.authenticate, function(req, res) {
+        var query_find="Select * from recentsearch";
+        client.execute(query_find,function(err,recentSearchData){
+            if(err)
+            {
+            	throw err;
+                console.log("There was a problem in fetching the recent search data");
+                return res.json({
+                    'error':'Problem in fetching recent searches'
+
+                },500);
+            }
+            for(var i = 0 ;i < recentSearchData.rows.length; i++){
+                if(recentSearchData.rows[i].emp_id === req.query.username){
+                    recentSearchData.rows = recentSearchData.rows[i];
+                }
+            }
+             return res.json({
+                'res': recentSearchData.rows
             });
+
+        });
+
+    });
+//-------------------------------------------------------------------------------------------------------------------------------------
+
+/*
+ app.get('/api/searchList', auth.authenticate, function(req, res) {
+ 	var username=req.query.username;
+ 	var query="Select * from users where username="+"'"+username+"'";
+ 	client.execute(query,function(err,result){
+ 		if(err)
+ 			throw err;
+ 	});
+
+ });
+
+    app.get('/api/source', auth.authenticate, function(req, res) {
+    })
+
+    app.get('/api/subscribedList', auth.authenticate, function(req, res) {
+    });
+*/
+    app.put('/api/events/:eventname/topicFollow', auth.authenticate, function(req, res) {
+    	var username=req.body.username;
+    	var query="Select * from users where username ="+"'"+username+"'";
+    	client.execute(query,function(err,result){
+    		if(err)
+    		{
+    			console.log("There was a problem while loading the data from the database");
+    			return res.json({
+    				'error':'Error while loading users table'
+    			},500);
+    		}
+    		var query_update="Update events SET follow="+req.body.following.follow+"Where id = "+req.body.following._id;
+    		client.execute(query_update,function(err2,result2){
+    			if(err2)
+    			{
+    				console.log("Problem while loading from the database");
+    				return res.json({
+    					'error':'Could not load from the database'
+
+    				},500);
+    			}
+    			return res.json({
+    				'successful':true
+    			});
+
+    		});
+    	});
     });
     /*topic follow end*/
 
     /* topic unfollow start*/
     app.put('/api/events/:eventname/topicUnfollow', auth.authenticate, function(req, res) {
-        var User = mongoose.model('User');
-        var Event = mongoose.model('Event');
+    	var username=req.body.username;
+    	var query="Select * from users where username ="+"'"+username+"'";
+    	client.execute(query,function(err,result){
+    		if(err)
+    		{
+    			console.log("There was a problem while loading the data from the database");
+    			return res.json({
+    				'error':'Error while loading users table'
+    			},500);
+    		}
+    		var query_update="Update events SET follow="+req.body.following.follow+"Where id = "+req.body.following._id;
+    		client.execute(query_update,function(err2,result2){
+    			if(err2)
+    			{
+    				console.log("Problem while loading from the database");
+    				return res.json({
+    					'error':'Could not load from the database'
 
-        User.findOne({
-            'username': req.body.username
-        }, {
-            'id': 1,
-            'username': 1,
-            'name': 1
-        }, function(err, following) {
+    				},500);
+    			}
+    			return res.json({
+    				'successful':true
+    			});
 
-            if (err) {
-                console.log('There was an error while loading data from the database: ', err);
-                return res.json({
-                    'error': 'Couldn\'t load user'
-                }, 500);
-            }
-
-            Event.update({
-                    '_id': req.body.following._id
-                },
-                {
-                    $set: {
-                        'follow': req.body.following.follow
-                    }
-                }, function(err, event) {
-                    if (err) {
-                        console.log('Couldn\'t save user');
-                        return res.json({
-                            'error': 'Couldn\'t save user'
-                        }, 500);
-                    }
-                    return res.json({
-                        'successful': true
-                });
-            })
-
-        });
+    		});
+    	});
     });
-    /* topic unfollow end*/
 };
+       /* topic unfollow end*/

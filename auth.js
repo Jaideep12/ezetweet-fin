@@ -1,24 +1,26 @@
+console.log("AUTH.JS");
 var url = require('url');
 var expires = require('expires');
 var bcrypt = require('bcrypt-nodejs');
 var mongoose = require('mongoose');
 var ldap = require('./ldap.js');
-
+var cassandra = require('cassandra-driver');
+var client = new cassandra.Client({ contactPoints: ['127.0.0.1'], keyspace: 'ezetweet' });
 
 var TokenStorage = {};
 var EXPIRES_AFTER = '1 hours';
 var TOKEN_SALT = '';
 
 function loadUserByUsername(username, callback) {
-    var User = mongoose.model('User');
-    User.findOne({
-        'username': username
-    }, function(err, user) {
-        if (err) {
-            return callback(err, null);
-        }
-        callback(null, user);
-    });
+ var query="SELECT * from users where username="+"'"+username+"'";
+ client.execute(query,function(err,user)
+ {
+    if(err)
+    {
+        return callback(err,null);
+    }
+    callback(null,user.rows[0]);
+ })
 }
 
 function buildAuthToken(userRes, callback) {
@@ -176,23 +178,27 @@ exports.init = function(app, Config) {
                     }
                     req.user = userRes;
 
-                    var User = mongoose.model('User');
-                    User.find({
-                        'email': userRes.email
-                    }).exec(function(err, count) {
-                        if (err) {
-                            console.log('There was an error while counting existing users: ' + err);
-                            return res.json({
-                                'error': 'Couldn find password'
-                            }, 500);
-                        }
+
+                   var query_count="SELECT count(*) from users where email = "+"'"+userRes.email+"'";
+                   client.execute(query,function(err,result)
+                   {
+                      if(err)
+                      {
+                        console.log("There was an error while counting the users");
+                        return res.json({
+                            'error':'Could not find the required password'
+                        },500);
+                      }
 						
-						 if (count < 1) {
+						 if (result < 1) {
 							 
-							
                             userRes.registered = new Date();
-                            var userDbObject = new User(userRes);
-                            userDbObject.save();
+                            var query_insert="INSERT INTO users(username,email,name,registered) VALUES("+"'"+userRes.username+"'"+","+"'"+userRes.email+"'"+","+"'"+userRes.name+"'"+","+userRes.registered+")";
+                            client.execute(query_insert,function(err,result)
+                            {
+                                console.log("Data saved into the database");
+
+                            })
                         }
                     });
 
