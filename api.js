@@ -291,6 +291,77 @@ exports.init = function(app, Config) {
     });
 
      app.get('/api/users/:username/:searchCriteriaData/:displaytweet/:dashboard/:skip/:limit', auth.authenticate, function(req, res) {
+     	var idList = [];
+        var searchCriteriaData = req.params.searchCriteriaData;
+
+		console.log("username::"+username);
+
+		console.log("displaytweet in API call::"+req.params.displaytweet);
+
+
+        var conditionArray = [];
+        if (searchCriteriaData == 'undefined') {} else {
+            searchCriteriaData = JSON.parse(searchCriteriaData);
+            for (var i = 0; i < searchCriteriaData.length; i++) {
+                console.log("colName::" + "author." + searchCriteriaData[i].key + ":" + searchCriteriaData[i].value);
+                var obj = {};
+                obj[searchCriteriaData[i].colname] = searchCriteriaData[i].colvalue;
+                conditionArray.push(obj);
+            }
+        }
+        var username=req.user.username;
+        console.log("Username = "+username);
+        var query="Select * from users where username="+"'"+username+"'";
+        client.execute(query,function(err,result){
+        	if(err)
+        	{
+        		console.log("There was a problem while loading the data from the users database");
+        		return res.json({
+        			'error':'Error while loading the data from the database'
+        		},500);
+        	}
+        	if(!result)
+        	{
+        		console.log("No such user was found in the database");
+        		return res.json({
+        			'error':'No such user was found in the database'
+        		},500);
+        	}
+        	if(result.rows[0].following!=null)
+        	{
+        	 for (var i = 0; i < result.rows[0].following.length; i++) {
+                if (result.rows[0].following[i].eventname) {
+                    console.log(result.rows[0].following[i].eventname);
+                    idList.push(result.rows[0].following[i].eventname);
+                }
+                else
+                {
+                	console.log("The event name for this particular user was not found in the database");
+                }
+            }
+             var criteria = (searchCriteriaData == 'undefined' || searchCriteriaData == '') ? '' : {
+                $and: conditionArray
+            };
+        }
+            console.log("Display all records");
+            var query3="Select * from tweets where author.eventname IN "+idList;
+            client.execute(query3,function(err,result){
+            	if(err)
+            	{
+            		throw err;
+            		console.log("There was a problem while getting the tweets from the database");
+            		return res.json({
+            			'error':'Could not load the required tweets'
+            		},500);
+            	}
+            	res.json({
+            		'tweets':result.rows
+
+            	});
+
+            });
+
+        });
 
     });
 
@@ -703,23 +774,65 @@ exports.init = function(app, Config) {
     });
 //-------------------------------------------------------------------------------------------------------------------------------------
 
-/*
  app.get('/api/searchList', auth.authenticate, function(req, res) {
  	var username=req.query.username;
  	var query="Select * from users where username="+"'"+username+"'";
  	client.execute(query,function(err,result){
  		if(err)
- 			throw err;
+ 		{
+ 			console.log("There was a problem while fetching the results from the database");
+ 		}
+ 		var query2="select group_and_count(parent_id),parent_name from events";
+ 		client.execute(query2,function(err2,result2){
+ 			if(err2)
+ 			{
+ 				console.log("There was a problem while formation of the list");
+ 				return res.json({
+ 					'error':'problem while fetching from the database'
+ 				},500);
+ 			}
+ 			res.json({
+ 				'list':result2.rows
+
+ 			});
+
+ 		});
  	});
 
  });
 
     app.get('/api/source', auth.authenticate, function(req, res) {
+    	var query="Select * from users where username = "+"'"+username+"'";
+    	client.execute(query,function(err,result)
+    	{
+    		if(err)
+    		{
+    			console.log("There was some problem while fetching the users");
+    		}
+    		var query2="Select group_and_count(author.sourceSystem),sourceSystem from events";
+    		client.execute(query2,function(err2,result2)
+    		{
+    			if(err)
+    			{
+    				console.log("Problem while performing aggregation");
+    				return res.json({
+    					'error':'Could not store tweet flag to the database'
+
+    				},500);
+    			}
+    			res.json({
+    				'source':result.rows
+    			})
+
+    		});
+
+    	});
     })
 
     app.get('/api/subscribedList', auth.authenticate, function(req, res) {
+
     });
-*/
+
     app.put('/api/events/:eventname/topicFollow', auth.authenticate, function(req, res) {
     	var username=req.body.username;
     	var query="Select * from users where username ="+"'"+username+"'";
