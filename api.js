@@ -94,7 +94,7 @@ exports.init = function(app, Config) {
 
             },500);
           }
-          console.log(result.rows[0].username);
+          console.log("Username in template="+result.rows[0].username);
           return res.json({
             'user':result.rows[0]
           });
@@ -133,6 +133,7 @@ exports.init = function(app, Config) {
            client.execute(insert_events,function(err,result){
             if(err)
             {
+            	throw err;
                 console.log("There was some problem while inserting the events");
                 return res.json({
                     'error':'Problem in inserting the events'
@@ -167,6 +168,7 @@ exports.init = function(app, Config) {
             client.execute(query_user_tweets,function(err,result){
                 if(err)
                 {
+                	throw err;
                     console.log("There was a problem while loading the data from the database");
                     return res.json({
                         'error':'Could not load tweet data'
@@ -257,13 +259,14 @@ exports.init = function(app, Config) {
         client.execute(query,function(err,result){
             if(err)
             {
+            	throw err;
                 console.log("Error while loading user data");
                 return res.json({
                     'error':'Could not load user data'
                 },500);
             }
                     res.json({
-                    'user':result
+                    'user':result.rows
                 });
 
         });
@@ -274,10 +277,11 @@ exports.init = function(app, Config) {
     app.get('/api/event/:eventname/tweets/:skip/:limit', auth.authenticate, function(req, res) {
         var author_event=req.params.eventname;
         var limit=req.params.limit;
-        var query_tweets="SELECT * from tweets where author.eventname="+"'"+author_event+"'"+"LIMIT "+limit;
+        var query_tweets="SELECT * from tweets where event_name="+"'"+author_event+"'"+"LIMIT "+limit;
         client.execute(query_tweets,function(err,result){
             if(err)
             {
+            	throw err;
                 console.log("Error while fetching tweets");
                 return res.json({
                     'error':'Error while fetching tweets from database'
@@ -285,16 +289,17 @@ exports.init = function(app, Config) {
                 },500);
             }
             res.json({
-                'tweets':result
+                'tweets':result.rows
             });
         });
     });
 
      app.get('/api/users/:username/:searchCriteriaData/:displaytweet/:dashboard/:skip/:limit', auth.authenticate, function(req, res) {
+     	console.log("Insearch criteria");
      	var idList = [];
         var searchCriteriaData = req.params.searchCriteriaData;
 
-		console.log("username::"+username);
+		console.log("username::"+req.params.username);
 
 		console.log("displaytweet in API call::"+req.params.displaytweet);
 
@@ -310,7 +315,6 @@ exports.init = function(app, Config) {
             }
         }
         var username=req.user.username;
-        console.log("Username = "+username);
         var query="Select * from users where username="+"'"+username+"'";
         client.execute(query,function(err,result){
         	if(err)
@@ -327,12 +331,12 @@ exports.init = function(app, Config) {
         			'error':'No such user was found in the database'
         		},500);
         	}
-        	if(result.rows[0].following!=null)
+        	if(result.rows[0].follow_event!=null)
         	{
-        	 for (var i = 0; i < result.rows[0].following.length; i++) {
-                if (result.rows[0].following[i].eventname) {
-                    console.log(result.rows[0].following[i].eventname);
-                    idList.push(result.rows[0].following[i].eventname);
+        	 for (var i = 0; i < result.rows[0].follow_event.length; i++) {
+                if (result.rows[0].follow_event[i]) {
+                	//console.log(result.rows[0].follow_event[i])
+                    idList.push(result.rows[0].follow_event[i]);
                 }
                 else
                 {
@@ -343,8 +347,16 @@ exports.init = function(app, Config) {
                 $and: conditionArray
             };
         }
+            var new_array=[],counter=0;
+            for(i=0;i<idList.length;i++)
+            {
+               var str="'"+idList[i]+"'";
+               new_array[counter++]=str;
+
+            }
+            var a ="LeaveApplication";
             console.log("Display all records");
-            var query3="Select * from tweets where author.eventname IN "+idList;
+            var query3="Select * from tweets where event_name="+"'"+a+"'"+" allow filtering";
             client.execute(query3,function(err,result){
             	if(err)
             	{
@@ -368,6 +380,7 @@ exports.init = function(app, Config) {
 
     
     app.post('/api/users/:username/tweets', auth.authenticate, function(req, res) {
+    	console.log("In tweets");
         var message=req.body.message;
         var eventId=req.event.id;
         var eventname=req.event.eventname;
@@ -414,7 +427,7 @@ exports.init = function(app, Config) {
             {
                 console.log("successfully inserted into comments");
                 return res.json({
-                    'comment':result
+                    'comment':result.rows
                 })
             }
 
@@ -424,7 +437,7 @@ exports.init = function(app, Config) {
 
     //// EVENT API
     app.get('/api/events', auth.authenticate, function(req, res) {
-    	console.log("Going to events");
+    	console.log("In events");
         var username=req.query.username;
         var query_find="Select * from users where username ="+"'"+username+"'";
         client.execute(query_find,function(err,result){
@@ -505,6 +518,7 @@ exports.init = function(app, Config) {
         });
 
     app.get('/api/events/followings', auth.authenticate, function(req, res) {
+    	console.log("In followings");
         var username=req.query.username;
         var query="SELECT * from users where username = "+"'"+username+"'";
         client.execute(query,function(err,result){
@@ -682,6 +696,7 @@ exports.init = function(app, Config) {
             }
             else
             {
+            	console.log("Fetching from recents");
                 var query_find2="Select * from recentsearch where emp_id="+"'"+emp_id+"'"+"allow filtering";
                 client.execute(query_find2,function(err,recentSearch){
                 	if(err)
@@ -695,6 +710,7 @@ exports.init = function(app, Config) {
                         client.execute(query_update,function(err,result){
                             if(err)
                             {
+                            	throw err;
                                 console.log("Error while updating Recent Searches");
                                 return res.json({
                                     'error':'Error updating recent searches'
@@ -714,6 +730,7 @@ exports.init = function(app, Config) {
                             client.execute(query,function(err,result){
                                 if(err)
                                 {
+                                	throw err;
                                     console.log("Could not update description field");
                                     return res.json({
                                         'error':'Could not update description'
@@ -728,6 +745,7 @@ exports.init = function(app, Config) {
                             });
                             if(err)
                             {
+                            	throw err;
                                 console.log("Could not update user tweet flag");
                                 return res.json({
                                     'error':'Could not update user tweet flag'
@@ -775,17 +793,20 @@ exports.init = function(app, Config) {
 //-------------------------------------------------------------------------------------------------------------------------------------
 
  app.get('/api/searchList', auth.authenticate, function(req, res) {
+ 	console.log("Inside search list");
  	var username=req.query.username;
  	var query="Select * from users where username="+"'"+username+"'";
  	client.execute(query,function(err,result){
  		if(err)
  		{
+ 			throw err;
  			console.log("There was a problem while fetching the results from the database");
  		}
  		var query2="select group_and_count(parent_id),parent_name from events";
  		client.execute(query2,function(err2,result2){
  			if(err2)
  			{
+ 				throw err;
  				console.log("There was a problem while formation of the list");
  				return res.json({
  					'error':'problem while fetching from the database'
@@ -802,26 +823,33 @@ exports.init = function(app, Config) {
  });
 
     app.get('/api/source', auth.authenticate, function(req, res) {
+    	console.log("In source");
     	var query="Select * from users where username = "+"'"+username+"'";
+    	console.log("Query written username ="+username);
     	client.execute(query,function(err,result)
     	{
     		if(err)
     		{
+    			console.log("error");
+    			throw err;
     			console.log("There was some problem while fetching the users");
     		}
-    		var query2="Select group_and_count(author.sourceSystem),sourceSystem from events";
+    		var query2="Select group_and_count(sourceSystem)as results from tweets";
+    		console.log("query2 done");
     		client.execute(query2,function(err2,result2)
     		{
     			if(err)
     			{
+    				throw err;
     				console.log("Problem while performing aggregation");
     				return res.json({
     					'error':'Could not store tweet flag to the database'
 
     				},500);
     			}
+    			console.log(result2.rows[0].results);
     			res.json({
-    				'source':result.rows
+    				'source':result2.rows
     			})
 
     		});
@@ -834,17 +862,19 @@ exports.init = function(app, Config) {
     });
 
     app.put('/api/events/:eventname/topicFollow', auth.authenticate, function(req, res) {
+    	console.log("Now Follow");
     	var username=req.body.username;
     	var query="Select * from users where username ="+"'"+username+"'";
     	client.execute(query,function(err,result){
     		if(err)
     		{
+    			throw err;
     			console.log("There was a problem while loading the data from the database");
     			return res.json({
     				'error':'Error while loading users table'
     			},500);
     		}
-    		var query_update="Update events SET follow="+req.body.following.follow+"Where id = "+req.body.following._id;
+    		var query_update="Update events SET follow="+req.body.result.rows[0].follow+"Where id = "+req.body.result.rows[0]._id;
     		client.execute(query_update,function(err2,result2){
     			if(err2)
     			{
@@ -865,20 +895,23 @@ exports.init = function(app, Config) {
 
     /* topic unfollow start*/
     app.put('/api/events/:eventname/topicUnfollow', auth.authenticate, function(req, res) {
+    	console.log("Unfollowng");
     	var username=req.body.username;
     	var query="Select * from users where username ="+"'"+username+"'";
     	client.execute(query,function(err,result){
     		if(err)
     		{
+    			throw err;
     			console.log("There was a problem while loading the data from the database");
     			return res.json({
     				'error':'Error while loading users table'
     			},500);
     		}
-    		var query_update="Update events SET follow="+req.body.following.follow+"Where id = "+req.body.following._id;
+    		var query_update="Update events SET follow="+req.body.result.rows[0].follow+"Where id = "+req.body.result.rows[0]._id;
     		client.execute(query_update,function(err2,result2){
     			if(err2)
     			{
+    				throw err2;
     				console.log("Problem while loading from the database");
     				return res.json({
     					'error':'Could not load from the database'
